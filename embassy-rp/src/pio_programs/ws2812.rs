@@ -2,7 +2,7 @@
 
 use embassy_time::Timer;
 use fixed::types::U24F8;
-use smart_leds::RGB8;
+use smart_leds::{RGB8, RGBA};
 
 use crate::clocks::clk_sys_freq;
 use crate::dma::{AnyChannel, Channel};
@@ -88,7 +88,7 @@ impl<'d, P: Instance, const S: usize, const N: usize> PioWs2812<'d, P, S, N> {
         cfg.fifo_join = FifoJoin::TxOnly;
         cfg.shift_out = ShiftConfig {
             auto_fill: true,
-            threshold: 24,
+            threshold: 32,
             direction: ShiftDirection::Left,
         };
 
@@ -107,6 +107,21 @@ impl<'d, P: Instance, const S: usize, const N: usize> PioWs2812<'d, P, S, N> {
         let mut words = [0u32; N];
         for i in 0..N {
             let word = (u32::from(colors[i].g) << 24) | (u32::from(colors[i].r) << 16) | (u32::from(colors[i].b) << 8);
+            words[i] = word;
+        }
+
+        // DMA transfer
+        self.sm.tx().dma_push(self.dma.reborrow(), &words).await;
+
+        Timer::after_micros(55).await;
+    }
+
+    /// Write a buffer of [smart_leds::RGBA<u8>] to the ws2812 string
+    pub async fn write_rgba(&mut self, colors: &[RGBA<u8>; N]) {
+        // Precompute the word bytes from the colors
+        let mut words = [0u32; N];
+        for i in 0..N {
+            let word = (u32::from(colors[i].r) << 24) | (u32::from(colors[i].b) << 16) | (u32::from(colors[i].g) << 8) | u32::from(colors[i].a);
             words[i] = word;
         }
 
